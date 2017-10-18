@@ -9,3 +9,5 @@
 - [dashboard](https://freeboard.io/)
 
 Implémentation du module network.LoRa sur Lopy: https://github.com/pycom/pycom-micropython-sigfox/blob/master/esp32/mods/modlora.c
+
+Lora Packet decoding : https://www.npmjs.com/package/lora-packet
