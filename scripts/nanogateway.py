@@ -209,6 +209,7 @@ class NanoGateway:
         while True:
             try:
                 data, src = self.sock.recvfrom(1024)
+                print ("data : {}".format(data))
                 _token = data[1:3]
                 _type = data[3]
                 if _type == PUSH_ACK:
