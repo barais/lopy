@@ -186,9 +186,6 @@ class NanoGateway:
             self.rxok += 1
             rx_data = self.lora_sock.recv(256)
             stats = lora.stats()
-
-            print("packet test : {} ".format(stats))
-            print("rxdata : {}".format(rx_data))
             makeNodePacket = self._make_node_packet(rx_data, self.rtc.now(), stats.rx_timestamp, stats.sfrx, stats.rssi, stats.snr)
             self._push_data(makeNodePacket)
             self.rxfw += 1
