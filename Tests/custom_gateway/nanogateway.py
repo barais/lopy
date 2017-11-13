@@ -11,7 +11,6 @@ import time
 import errno
 import _thread
 import socket
-import ucrypto
 
 
 PROTOCOL_VERSION = const(2)
@@ -47,12 +46,6 @@ RX_PK = {"rxpk": [{"time": "", "tmst": 0,
 
 TX_ACK_PK = {"txpk_ack":{"error":""}}
 
-def generateDataFuzz32Bytes():
-    return b"\x20"+ucrypto.getrandbits(32*8)[:32]
-
-def generateDataFuzzRandomLength():
-    length = int(ucrypto.getrandbits(8)[0])
-    return b"\x20"+ucrypto.getrandbits(length*8)[:length]
 
 class NanoGateway:
 
@@ -97,6 +90,7 @@ class NanoGateway:
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.setblocking(False)
 
+
         # Push the first time immediatelly
         self._push_data(self._make_stat_packet())
 
@@ -108,7 +102,7 @@ class NanoGateway:
         _thread.start_new_thread(self._udp_thread, ())
 
         # Initialize LoRa in LORA mode
-        self.lora = LoRa(mode=LoRa.LORA, frequency=self.frequency, bandwidth=LoRa.BW_125KHZ, sf=self.sf,
+        self.lora = LoRa(mode=LoRa.LORAWAN, frequency=self.frequency, bandwidth=LoRa.BW_125KHZ, sf=self.sf,
                         preamble=8, coding_rate=LoRa.CODING_4_5, tx_iq=True)
         # Create a raw LoRa socket
         self.lora_sock = socket.socket(socket.AF_LORA, socket.SOCK_RAW)
@@ -172,6 +166,7 @@ class NanoGateway:
         packet = bytes([PROTOCOL_VERSION]) + token + bytes([PULL_DATA]) + binascii.unhexlify(self.id)
         with self.udp_lock:
             try:
+                print(packet)
                 self.sock.sendto(packet, self.server_ip)
             except Exception:
                 print("PULL exception")
@@ -199,11 +194,11 @@ class NanoGateway:
             self.rxfw += 1
         if events & LoRa.TX_PACKET_EVENT:
             self.txnb += 1
-            lora.init(mode=LoRa.LORA, frequency=self.frequency, bandwidth=LoRa.BW_125KHZ,
+            lora.init(mode=LoRa.LORAWAN, frequency=self.frequency, bandwidth=LoRa.BW_125KHZ,
                      sf=self.sf, preamble=8, coding_rate=LoRa.CODING_4_5, tx_iq=True)
 
     def _send_down_link(self, data, tmst, datarate, frequency):
-        self.lora.init(mode=LoRa.LORA, frequency=frequency, bandwidth=LoRa.BW_125KHZ,
+        self.lora.init(mode=LoRa.LORAWAN, frequency=frequency, bandwidth=LoRa.BW_125KHZ,
                       sf=self._dr_to_sf(datarate), preamble=8, coding_rate=LoRa.CODING_4_5,
                       tx_iq=True)
         while time.ticks_us() < tmst:
@@ -225,17 +220,13 @@ class NanoGateway:
                     ack_error = TX_ERR_NONE
                     tx_pk = json.loads(data[4:])
                     print("tx_pk : {}".format(tx_pk))
-                    print("tx_pk[txpk][data] : {}".format(tx_pk["txpk"]["data"]))
+                    print("tx_pk [txpk][data] : {}".format(tx_pk["txpk"]["data"]))
                     tmst = tx_pk["txpk"]["tmst"]
                     t_us = tmst - time.ticks_us() - 5000
                     if t_us < 0:
                         t_us += 0xFFFFFFFF
                     if t_us < 20000000:
-                        #toSend = binascii.a2b_base64(tx_pk["txpk"]["data"])
-                        toSend = generateDataFuzzRandomLength()
-                        hexToString = ":".join("{:02x}".format(c) for c in toSend)
-                        print("toSend : {}".format(hexToString))
-                        self.uplink_alarm = Timer.Alarm(handler=lambda x: self._send_down_link(toSend,
+                        self.uplink_alarm = Timer.Alarm(handler=lambda x: self._send_down_link(binascii.a2b_base64(tx_pk["txpk"]["data"]),
                                                                                               tx_pk["txpk"]["tmst"] - 10, tx_pk["txpk"]["datr"],
                                                                                               int(tx_pk["txpk"]["freq"] * 1000000)), us=t_us)
                     else:
