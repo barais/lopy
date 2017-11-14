@@ -1,7 +1,3 @@
-/*
- * Proxy which subscribes to a MQTT topic and exposes the data through a REST endpoint
- */
-
 package main
 
 import (
@@ -18,7 +14,34 @@ import (
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
-func onMessageReceived(client MQTT.Client, message MQTT.Message) {
+type route struct {
+	mqttHandler MQTT.MessageHandler
+	httpHandler http.HandlerFunc
+}
+
+var MyServerName = "*"
+var data []int
+var i int64
+var routes = map[string]route{
+	"test/lopy": route{testMQTTHandler, testHTTPHandler},
+}
+
+func addRoutes(client MQTT.Client, mux *http.ServeMux) {
+	for topic, r := range routes {
+		client.Subscribe(topic, 0, r.mqttHandler)
+		mux.HandleFunc(fmt.Sprintf("/api/%s", topic), r.httpHandler)
+	}
+}
+
+func testHTTPHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Add("Access-Control-Allow-Origin", MyServerName)
+	encoded, err := json.Marshal(data)
+	if err == nil {
+		fmt.Fprintf(w, string(encoded))
+	}
+}
+
+func testMQTTHandler(client MQTT.Client, message MQTT.Message) {
 	payload := message.Payload()
 	value, err := strconv.Atoi(string(payload))
 
@@ -30,13 +53,40 @@ func onMessageReceived(client MQTT.Client, message MQTT.Message) {
 	}
 }
 
-var data []int
-var i int64
+func connectMqtt(user, passwd, server string) MQTT.Client {
+	connOpts := &MQTT.ClientOptions{
+		ClientID:             "lopy-project",
+		CleanSession:         true,
+		Username:             user,
+		Password:             passwd,
+		MaxReconnectInterval: time.Duration(1 * time.Second),
+		KeepAlive:            int64(30 * time.Second),
+		TLSConfig:            tls.Config{InsecureSkipVerify: true, ClientAuth: tls.NoClientCert},
+	}
+
+	connOpts.AddBroker(server)
+	client := MQTT.NewClient(connOpts)
+
+	if token := client.Connect(); token.Wait() && token.Error() != nil {
+		panic(token.Error())
+	}
+
+	return client
+}
+
+func startServer(mux http.Handler, bind string) {
+	server := &http.Server{
+		Addr:           bind,
+		Handler:        mux,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+	server.ListenAndServe()
+}
 
 func main() {
-	data = make([]int, 0)
 	c := make(chan os.Signal, 1)
-	i = 0
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
@@ -44,43 +94,9 @@ func main() {
 		os.Exit(0)
 	}()
 
-	connOpts := &MQTT.ClientOptions{
-		ClientID:             "un-id",
-		CleanSession:         true,
-		Username:             "",
-		Password:             "",
-		MaxReconnectInterval: time.Duration(1 * time.Second),
-		KeepAlive:            int64(30 * time.Second),
-		TLSConfig:            tls.Config{InsecureSkipVerify: true, ClientAuth: tls.NoClientCert},
-	}
-	connOpts.AddBroker("tcp://192.168.43.253:1883")
-	connOpts.OnConnect = func(c MQTT.Client) {
-		if token := c.Subscribe("test/lopy", 0, onMessageReceived); token.Wait() && token.Error() != nil {
-			panic(token.Error())
-		}
-	}
-
-	client := MQTT.NewClient(connOpts)
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		panic(token.Error())
-	} else {
-		fmt.Printf("Connected to %s\n", "localhost")
-	}
-
+	client := connectMqtt("", "", "tcp://192.168.43.253:1883")
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/test/lopy", func(w http.ResponseWriter, req *http.Request) {
-		encoded, err := json.Marshal(data)
-		if err == nil {
-			fmt.Fprintf(w, string(encoded))
-		}
-	})
+	addRoutes(client, mux)
 
-	s := &http.Server{
-		Addr:           ":8080",
-		Handler:        mux,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20,
-	}
-	s.ListenAndServe()
+	startServer(mux, ":8080")
 }
