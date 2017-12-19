@@ -1,0 +1,75 @@
+{
+	"version": 1,
+	"allow_edit": true,
+	"plugins": [],
+	"panes": [
+		{
+			"title": "Capteur de lumière",
+			"width": 1,
+			"row": {
+				"2": 1,
+				"4": 1,
+				"5": 1
+			},
+			"col": {
+				"2": 1,
+				"4": 1,
+				"5": 1
+			},
+			"col_width": 3,
+			"widgets": [
+				{
+					"type": "highcharts-timeseries",
+					"settings": {
+						"timeframe": 60,
+						"blocks": 4,
+						"xaxis": "{\"title\":{\"text\" : \"Time\"}, \"type\": \"datetime\", \"floor\":0}",
+						"yaxis": "{\"title\":{\"text\" : \"Values\"}, \"minorTickInterval\":\"auto\", \"floor\":0}",
+						"series1": "datasources[\"LightSensor\"]",
+						"series1X": "timestamp",
+						"series1Y": "value"
+					}
+				}
+			]
+		},
+		{
+			"title": "",
+			"width": 1,
+			"row": {
+				"2": 11,
+				"4": 1,
+				"7": 1
+			},
+			"col": {
+				"2": 1,
+				"4": 4,
+				"7": 4
+			},
+			"col_width": 1,
+			"widgets": [
+				{
+					"type": "gauge",
+					"settings": {
+						"value": "datasources[\"LightSensor\"][\"value\"]",
+						"units": "",
+						"min_value": 0,
+						"max_value": "4096"
+					}
+				}
+			]
+		}
+	],
+	"datasources": [
+		{
+			"name": "LightSensor",
+			"type": "JSON",
+			"settings": {
+				"url": "http://localhost:8181/api/test/lopy",
+				"use_thingproxy": false,
+				"refresh": 1,
+				"method": "GET"
+			}
+		}
+	],
+	"columns": 4
+}
