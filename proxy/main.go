@@ -19,9 +19,13 @@ type route struct {
 	httpHandler http.HandlerFunc
 }
 
-var MyServerName = "*"
-var data []int
-var i int64
+type sensorPing struct {
+	Timestamp int64 `json:"timestamp"`
+	Value     int   `json:"value"`
+}
+
+var myServerName = "*"
+var lastValue *sensorPing
 var routes = map[string]route{
 	"test/lopy": route{testMQTTHandler, testHTTPHandler},
 }
@@ -34,11 +38,10 @@ func addRoutes(client MQTT.Client, mux *http.ServeMux) {
 }
 
 func testHTTPHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Add("Access-Control-Allow-Origin", MyServerName)
-	encoded, err := json.Marshal(data)
-	if err == nil {
-		fmt.Fprintf(w, string(encoded))
-	}
+	fmt.Println("Received a pull")
+	w.Header().Add("Access-Control-Allow-Origin", myServerName)
+	data, _ := json.Marshal(lastValue)
+	w.Write(data)
 }
 
 func testMQTTHandler(client MQTT.Client, message MQTT.Message) {
@@ -49,7 +52,7 @@ func testMQTTHandler(client MQTT.Client, message MQTT.Message) {
 		fmt.Printf("Error: received %s\n", payload)
 	} else {
 		fmt.Printf("Received %s\n", payload)
-		data = append(data, value)
+		lastValue = &sensorPing{time.Now().UnixNano(), value}
 	}
 }
 
@@ -94,9 +97,10 @@ func main() {
 		os.Exit(0)
 	}()
 
-	client := connectMqtt("", "", "tcp://192.168.43.253:1883")
+	client := connectMqtt("", "", "tcp://127.0.0.1:1883")
 	mux := http.NewServeMux()
+
 	addRoutes(client, mux)
 
-	startServer(mux, ":8080")
+	startServer(mux, ":8181")
 }
